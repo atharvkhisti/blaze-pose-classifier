@@ -1,12 +1,13 @@
 # BlazePose Exercise Classification & Repetition Counting
 
-Unified, cleaned README for the project. This repository implements:
+Production‑style realtime exercise classification + rep counting with:
 
-* Dataset → landmarks → features → temporal windows → model training
-* Real‑time multi‑model exercise classification (RF baseline / RF enhanced / XGBoost)
-* Simple and strict (FSM + amplitude/velocity gated) repetition counting
-* Adaptive rep thresholds & probability smoothing
-* Research paper (IEEE format) under `paper/` (primary source: `clean_paper.tex` used for Overleaf)
+* Landmark extraction → feature engineering → temporal windows → model training
+* Multiple models (RF baseline, RF enhanced, XGBoost) with optional filtering
+* Strict rep logic (amplitude, velocity, dwell) + adaptive thresholds
+* Jitter suppression & angle smoothing to avoid false reps from small noise
+* Per‑exercise JSON configs for one‑command launches
+* Research paper sources under `paper/` (`clean_paper.tex` primary)
 
 ---
 ## 1. Environment (Windows PowerShell)
@@ -20,37 +21,64 @@ pip install -r requirements.txt
 > Already have the `.venv` from earlier work? Just run the last two lines.
 
 ---
-## 2. Quick Real‑Time Inference (If Models Already Trained)
+## 2. Quick Real‑Time Inference (Models Present)
+Simplest run (auto exercise detection, all models):
 ```powershell
-./.venv/Scripts/python.exe src/realtime_inference.py --models models --show-angle
+python src/realtime_inference.py --models models --show-angle --adaptive-reps --smooth 5
 ```
 Interactive keys: `q` quit · `m` cycle model · `r` reset reps · `s` snapshot.
 
-### Optional performance / UX flags
-* Lower resolution: `--width 640 --height 360`
-* Smooth predictions: `--smooth 5`
-* Adaptive rep thresholds: `--adaptive-reps`
-* Strict FSM reps: `--rep-mode strict --strict-reps`
-* List webcams first: `--list-devices`
+### New / Important Flags
+| Flag | Purpose |
+|------|---------|
+| `--config <file>` | Load JSON defaults (command line overrides) |
+| `--model-include rf_enhanced,xgb_enhanced` | Only load specific models |
+| `--force-exercise bicep_curls` | Skip classifier for rep counting of chosen exercise |
+| `--rep-mode strict --strict-reps` | Enable advanced repetition gating |
+| `--adaptive-reps` | Learn personalized down/up angle thresholds |
+| `--smooth 5` | Majority vote smoothing over last 5 predictions |
+| `--angle-jitter-thresh 2.0` | Ignore tiny angle changes below this delta (deg) |
+| `--min-still-frames 4` | Frames of low motion before accepting small drift |
+| `--elbow-down-thresh / --elbow-up-thresh` | Override elbow thresholds (pushups/curls) |
+| `--skip-n 1` | Process every other frame for speed |
+| `--auto-recover` | Attempt backend switch if feed stalls |
+
+### Minimal + Fast (XGBoost only)
+```powershell
+python src/realtime_inference.py --models models --model-include xgb_enhanced --smooth 5 --adaptive-reps
+```
+
+### Raw Preview (debug camera)
+```powershell
+python src/realtime_inference.py --raw-preview --device 0 --width 640 --height 360
+```
 
 ---
-## 3. Per‑Exercise Run Commands (Force Counting)
-The classifier normally auto‑detects the exercise; you can force rep counting mode for focused sessions / calibration. Each command below assumes models already exist in `models/` and uses angle overlay + adaptive thresholds.
+## 3. Per‑Exercise One‑Command Configs
+Use JSON configs instead of long CLI strings. Example for bicep curls:
+```powershell
+python src/realtime_inference.py --config configs/bicep_curls.json
+```
+Each config sets: forced exercise, strict mode, amplitude threshold, smoothing, jitter suppression, model filtering, resolution, adaptive reps, angle overlay.
 
-| Exercise | Command (PowerShell) |
-|----------|----------------------|
-| Squats | `./.venv/Scripts/python.exe src/realtime_inference.py --models models --force-exercise squats --show-angle --adaptive-reps` |
-| Lunges | `./.venv/Scripts/python.exe src/realtime_inference.py --models models --force-exercise lunges --show-angle --adaptive-reps` |
-| Situps | `./.venv/Scripts/python.exe src/realtime_inference.py --models models --force-exercise situps --show-angle --adaptive-reps` |
-| Pushups | `./.venv/Scripts/python.exe src/realtime_inference.py --models models --force-exercise pushups --show-angle --adaptive-reps --elbow-down-thresh 55 --elbow-up-thresh 160` |
-| Jumping Jacks | `./.venv/Scripts/python.exe src/realtime_inference.py --models models --force-exercise jumping_jacks --show-angle --adaptive-reps` |
-| Bicep Curls | `./.venv/Scripts/python.exe src/realtime_inference.py --models models --force-exercise bicep_curls --show-angle --adaptive-reps` |
-| Tricep Extensions | `./.venv/Scripts/python.exe src/realtime_inference.py --models models --force-exercise tricep_extensions --show-angle --adaptive-reps` |
-| Dumbbell Rows | `./.venv/Scripts/python.exe src/realtime_inference.py --models models --force-exercise dumbbell_rows --show-angle --adaptive-reps` |
-| Dumbbell Shoulder Press | `./.venv/Scripts/python.exe src/realtime_inference.py --models models --force-exercise dumbbell_shoulder_press --show-angle --adaptive-reps` |
-| Lateral Shoulder Raises | `./.venv/Scripts/python.exe src/realtime_inference.py --models models --force-exercise lateral_shoulder_raises --show-angle --adaptive-reps` |
+Available config files:
+```
+configs/bicep_curls.json
+configs/pushups.json
+configs/squats.json
+configs/lunges.json
+configs/jumping_jacks.json
+configs/situps.json
+configs/dumbbell_rows.json
+configs/dumbbell_shoulder_press.json
+configs/lateral_shoulder_raises.json
+configs/tricep_extensions.json
+```
 
-Add strict counting (quality gating) by appending: `--rep-mode strict --strict-reps --min-rep-amplitude 25`.
+Override anything ad‑hoc:
+```powershell
+python src/realtime_inference.py --config configs/pushups.json --angle-jitter-thresh 3.0 --min-rep-amplitude 28
+```
 
 ---
 ## 4. Full Data → Model Pipeline
@@ -82,10 +110,16 @@ Only needed if you are re‑training.
 ```
 
 ---
-## 5. Repetition Counting Modes
-* **Simple** (default): lightweight threshold crossing (`RepCounter`).
-* **Strict**: amplitude, velocity, dwell, separation checks (`AdvancedRepCounter`). Use `--rep-mode strict --strict-reps`.
-* Adaptive thresholds automatically refine down/up angles with `--adaptive-reps` once sufficient range is observed.
+## 5. Repetition Counting & Noise Control
+| Mode | Description | When to Use |
+|------|-------------|-------------|
+| Simple | Fast threshold crossing (single angle) | Quick demos, low noise |
+| Strict | FSM + amplitude + velocity + hold + separation | Quality / form focus |
+
+Enhancers:
+* `--adaptive-reps`: Personalizes down/up after enough motion span is observed.
+* Jitter suppression: Freezes angle if delta < `--angle-jitter-thresh` until `--min-still-frames` passes.
+* Angle EMA smoothing: `--angle-smooth-alpha` (default 0.3).
 
 ---
 ## 6. Project Layout (Simplified)
@@ -115,11 +149,14 @@ Optional (manual) if you want an even leaner tree:
 ## 8. Troubleshooting Cheatsheet
 | Issue | Hint |
 |-------|------|
-| No models found | Re-run training step 4.4 |
-| Low FPS | Lower resolution or add `--skip-n 1` |
-| Few reps counted | Use `--adaptive-reps` or strict mode for form checking |
-| Misclassifications early | Wait until window fills (`Window: 60/60`) |
-| Black camera feed | Add `--auto-recover` or test with `--list-devices` |
+| No models found | Re-run training (section 4) |
+| First prediction slow / freeze | Large RF models spinning threads; try `--model-include xgb_enhanced` |
+| False tiny reps | Increase `--angle-jitter-thresh` or `--min-rep-amplitude` |
+| Reps not counted | Lower `--min-rep-amplitude` or disable strict mode |
+| Misclassification early | Wait for full window (`Window: 60/60`) |
+| Black / frozen feed | Use `--auto-recover` or lower resolution |
+| High CPU | Add `--skip-n 1` or restrict models |
+| Elbow thresholds off | Tune `--elbow-down-thresh / --elbow-up-thresh` |
 
 ---
 ## 9. Paper
