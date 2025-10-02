@@ -1,0 +1,42 @@
+\begin{tikzpicture}[node distance=1.5cm, auto, thick]
+    % Define block styles
+    \tikzstyle{block} = [rectangle, draw, fill=blue!20, 
+        text width=8em, text centered, rounded corners, minimum height=3em]
+    \tikzstyle{line} = [draw, -latex']
+    
+    % Place nodes
+    \node [block] (video) {Video Input};
+    \node [block, right=of video] (blazepose) {BlazePose Model};
+    \node [block, right=of blazepose] (landmarks) {33 Body Landmarks};
+    
+    \node [block, below=of landmarks] (features) {Feature Extraction};
+    
+    \node [block, below left=of features] (classification) {Exercise Classification\\(XGBoost/RF)};
+    \node [block, below right=of features] (counting) {Repetition Counting\\(FSM)};
+    
+    \node [block, below=of classification, xshift=3cm] (output) {Output Results};
+    
+    % Draw edges
+    \path [line] (video) -- (blazepose);
+    \path [line] (blazepose) -- (landmarks);
+    \path [line] (landmarks) -- (features);
+    \path [line] (features) -- (classification);
+    \path [line] (features) -- (counting);
+    \path [line] (classification) -- (output);
+    \path [line] (counting) -- (output);
+    
+    % Add feature details box
+    \node [draw, dashed, text width=16em, below=0.5cm of landmarks, xshift=7cm] (feature_details) {
+        \textbf{Feature Types:}
+        \begin{itemize}
+            \item Joint angles
+            \item Relative distances
+            \item Height ratios
+            \item Velocity \& acceleration
+            \item Statistical measures
+            \item Frequency domain features
+        \end{itemize}
+    };
+    
+    \draw [->, dashed] (features) -- (feature_details);
+\end{tikzpicture}

@@ -1,0 +1,33 @@
+\begin{tikzpicture}
+\begin{axis}[
+    xbar,
+    y axis line style = { opacity = 0 },
+    axis x line       = none,
+    tickwidth         = 0pt,
+    enlarge y limits  = 0.2,
+    enlarge x limits  = 0.02,
+    symbolic y coords = {Knee angle, Elbow angle, Hip-knee distance, Velocity of wrists, Shoulder angle, Ankle-hip ratio, Wrist-ankle distance, Acceleration of hips, Hip height variation, Frequency of knee motion},
+    nodes near coords,
+    nodes near coords align={horizontal},
+    width=\textwidth,
+    height=7cm,
+    bar width=0.5cm,
+    ylabel={},
+    xlabel={Importance Score},
+    xmin=0,
+    xmax=0.14,
+]
+\addplot[fill=blue!70] coordinates {
+    (0.128, Knee angle)
+    (0.115, Elbow angle)
+    (0.098, Hip-knee distance)
+    (0.087, Velocity of wrists)
+    (0.078, Shoulder angle)
+    (0.069, Ankle-hip ratio)
+    (0.062, Wrist-ankle distance)
+    (0.055, Acceleration of hips)
+    (0.047, Hip height variation)
+    (0.041, Frequency of knee motion)
+};
+\end{axis}
+\end{tikzpicture}

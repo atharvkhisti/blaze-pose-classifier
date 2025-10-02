@@ -1,0 +1,60 @@
+digraph {
+  // Graph settings
+  graph [pad="0.5", nodesep="0.5", ranksep="0.75", fontname="Arial"];
+  node [shape=box, style="rounded,filled", fontname="Arial", fontsize=12];
+  edge [fontname="Arial", fontsize=10];
+
+  // Node definitions with colors
+  Input [label="Video Input\n(Camera/File)", fillcolor="#e6f2ff"];
+  BlazePose [label="BlazePose\nPose Estimation", fillcolor="#d1e0e0"];
+  FeatureExtraction [label="Feature\nExtraction", fillcolor="#d4e6f1"];
+  ML [label="Machine Learning\nClassifier", fillcolor="#d5f5e3"];
+  RepCounter [label="Repetition\nCounter", fillcolor="#fcf3cf"];
+  Visualization [label="Visualization\n& Feedback", fillcolor="#f5cba7"];
+  
+  // Subgraphs for feature types
+  subgraph cluster_features {
+    label = "Feature Engineering";
+    style = "rounded,filled";
+    fillcolor = "#e8f8f5";
+    margin = 16;
+    
+    StaticFeatures [label="Static\nJoint Angles", fillcolor="white"];
+    DynamicFeatures [label="Dynamic\nFeatures", fillcolor="white"];
+    PostureFeatures [label="Posture\nFeatures", fillcolor="white"];
+    AnthroFeatures [label="Anthropometric\nFeatures", fillcolor="white"];
+    TemporalFeatures [label="Temporal\nFeatures", fillcolor="white"];
+    RelativeFeatures [label="Relative\nPosition", fillcolor="white"];
+  }
+  
+  // Connections
+  Input -> BlazePose;
+  BlazePose -> FeatureExtraction;
+  
+  FeatureExtraction -> StaticFeatures [style=dashed];
+  FeatureExtraction -> DynamicFeatures [style=dashed];
+  FeatureExtraction -> PostureFeatures [style=dashed];
+  FeatureExtraction -> AnthroFeatures [style=dashed];
+  FeatureExtraction -> TemporalFeatures [style=dashed];
+  FeatureExtraction -> RelativeFeatures [style=dashed];
+  
+  StaticFeatures -> ML;
+  DynamicFeatures -> ML;
+  PostureFeatures -> ML;
+  AnthroFeatures -> ML;
+  TemporalFeatures -> ML;
+  RelativeFeatures -> ML;
+  
+  ML -> RepCounter;
+  ML -> Visualization;
+  RepCounter -> Visualization;
+  
+  // Training pipeline
+  DataCollection [label="Data Collection", fillcolor="#d2b4de"];
+  ModelTraining [label="Model Training", fillcolor="#c39bd3"];
+  ModelEvaluation [label="Model Evaluation", fillcolor="#bb8fce"];
+  
+  DataCollection -> ModelTraining;
+  ModelTraining -> ModelEvaluation;
+  ModelEvaluation -> ML [label="Load model"];
+}

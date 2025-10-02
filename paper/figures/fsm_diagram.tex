@@ -1,0 +1,31 @@
+\begin{tikzpicture}[node distance=2cm, auto, thick]
+    % Define block styles
+    \tikzstyle{state} = [circle, draw, fill=blue!20, 
+        text width=6em, text centered, minimum height=3em]
+    \tikzstyle{line} = [draw, -latex']
+    
+    % Place nodes
+    \node [state] (standing) {Standing\\State};
+    \node [state, right=of standing] (transitioning) {Transitioning\\State};
+    \node [state, below=of transitioning] (squatting) {Squatting\\State};
+    
+    % Draw edges
+    \path [line] (standing) -- node[above] {Knee angle < 160°} (transitioning);
+    \path [line] (transitioning) -- node[right] {Hip position < threshold} (squatting);
+    \path [line] (squatting) -- node[left, xshift=-0.5cm] {Knee angle > 130°} (transitioning);
+    \path [line] (transitioning) to[bend right=45] node[below] {Knee angle > 170°} (standing);
+    
+    % Add count trigger
+    \node [draw, dashed, text width=10em, below=of standing, xshift=1cm] (count_trigger) {
+        \textbf{Repetition Counter:}\\
+        Increment when transitioning from Squatting to Standing states
+    };
+    
+    \draw [->, dashed] ($(transitioning)!0.5!(standing)$) -- (count_trigger);
+    
+    % Add note about thresholds
+    \node [draw, dashed, fill=yellow!10, text width=14em, above=of transitioning] (thresholds) {
+        \textbf{Thresholds:}\\
+        Determined through calibration phase for each user
+    };
+\end{tikzpicture}
