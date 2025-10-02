@@ -1,0 +1,15 @@
+{
+  "force_exercise": "dumbbell_shoulder_press",
+  "rep_mode": "strict",
+  "strict_reps": true,
+  "min_rep_amplitude": 25,
+  "min_prob": 0.25,
+  "smooth": 5,
+  "adaptive_reps": true,
+  "angle_jitter_thresh": 2.0,
+  "min_still_frames": 4,
+  "width": 640,
+  "height": 360,
+  "model_include": "rf_enhanced,xgb_enhanced",
+  "show_angle": true
+}

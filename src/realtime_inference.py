@@ -253,7 +253,11 @@ def load_models(models_dir: str):
 
 
 def main():
-    ap = argparse.ArgumentParser(description='Realtime webcam exercise classification & rep counting')
+    base = argparse.ArgumentParser(add_help=False)
+    base.add_argument('--config', help='JSON config file with default parameters')
+    prelim, _ = base.parse_known_args()
+
+    ap = argparse.ArgumentParser(parents=[base], description='Realtime webcam exercise classification & rep counting')
     ap.add_argument('--models', default='models', help='Models directory with trained pickles and metadata')
     ap.add_argument('--device', type=int, default=0, help='Webcam device index')
     ap.add_argument('--min-prob', type=float, default=0.35, help='Minimum probability to accept prediction')
@@ -275,6 +279,9 @@ def main():
     ap.add_argument('--elbow-up-thresh', type=float, help='Override up (extended) threshold for elbow-based reps')
     ap.add_argument('--vis-thresh', type=float, default=0.5, help='Landmark visibility minimum (set higher in low light)')
     ap.add_argument('--adaptive-reps', action='store_true', help='Enable adaptive thresholds (learn from your min/max angles)')
+    ap.add_argument('--model-include', help='Comma-separated models to load (subset). Example: rf_enhanced,xgb_enhanced')
+    ap.add_argument('--angle-jitter-thresh', type=float, default=1.8, help='Angle delta (deg) below which motion is treated as jitter')
+    ap.add_argument('--min-still-frames', type=int, default=3, help='Frames of sub-threshold motion before accepting new small drift')
     ap.add_argument('--angle-smooth-alpha', type=float, default=0.3, help='EMA smoothing factor for primary angle')
     ap.add_argument('--strict-reps', action='store_true', help='Use advanced rep counting with amplitude & velocity gating')
     ap.add_argument('--min-rep-amplitude', type=float, default=25.0, help='Minimum angle excursion (deg) for a valid rep in strict mode')
@@ -283,6 +290,15 @@ def main():
     ap.add_argument('--velocity-thresh', type=float, default=1.5, help='Min absolute deg/frame velocity to consider direction change (strict mode)')
     ap.add_argument('--landmark-smooth-alpha', type=float, default=0.4, help='EMA smoothing alpha for landmark coordinates (reduces jitter)')
     ap.add_argument('--rep-mode', choices=['simple','strict'], default='simple', help='Rep counting mode: simple (earlier stable) or strict (advanced gating)')
+    if prelim.config and os.path.exists(prelim.config):
+        try:
+            with open(prelim.config,'r',encoding='utf-8') as cf:
+                cfg_data = json.load(cf)
+            valid = {a.dest for a in ap._actions}
+            defaults = {k:v for k,v in cfg_data.items() if k in valid}
+            ap.set_defaults(**defaults)
+        except Exception as e:
+            print(f'[WARN] Failed to load config {prelim.config}: {e}')
     args = ap.parse_args()
 
     os.makedirs(args.snapshot_dir, exist_ok=True)
@@ -303,8 +319,11 @@ def main():
         return
 
     le, model_list = load_models(args.models)
+    if args.model_include:
+        include = {s.strip() for s in args.model_include.split(',') if s.strip()}
+        model_list = [m for m in model_list if m[0] in include]
     if not model_list:
-        raise SystemExit('No models found. Train models first.')
+        raise SystemExit('No models found after filtering. Train or adjust --model-include.')
     model_idx = 0
 
     mp_pose = mp.solutions.pose.Pose(static_image_mode=False, model_complexity=args.model_complexity, enable_segmentation=False)
@@ -382,6 +401,8 @@ def main():
         print('[RECOVER] Failed to reopen camera on all backends.')
     smoothed_coords = None  # (33,2) smoothed
     frame_index_global = 0
+    # Per-exercise angle jitter filtering state
+    angle_filter_state: Dict[str, Dict[str, float]] = {}
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -477,6 +498,26 @@ def main():
                             up = args.elbow_up_thresh
                     if rep_label_simple not in rep_counters:
                         rep_counters[rep_label_simple] = RepCounter(down, up)
+                    # Jitter suppression for simple mode
+                    if rep_label_simple not in angle_filter_state:
+                        angle_filter_state[rep_label_simple] = {'last': np.nan, 'still': 0}
+                    stf = angle_filter_state[rep_label_simple]
+                    if not np.isnan(ang_primary):
+                        if np.isnan(stf['last']):
+                            stf['last'] = ang_primary
+                            stf['still'] = 0
+                        else:
+                            delta = abs(ang_primary - stf['last'])
+                            if delta < args.angle_jitter_thresh:
+                                stf['still'] += 1
+                                if stf['still'] < args.min_still_frames:
+                                    ang_primary = stf['last']
+                                else:
+                                    stf['last'] = ang_primary
+                                    stf['still'] = 0
+                            else:
+                                stf['last'] = ang_primary
+                                stf['still'] = 0
                     rep_counters[rep_label_simple].update(ang_primary)
         else:
             # If we have not seen landmarks for a while, attempt recovery (maybe driver glitch)
@@ -562,6 +603,27 @@ def main():
                         span = st['max'] - st['min']
                         down = st['min'] + span * 0.25
                         up = st['max'] - span * 0.25
+                # Jitter suppression for strict mode
+                if rep_label not in angle_filter_state:
+                    angle_filter_state[rep_label] = {'last': np.nan, 'still': 0}
+                stf2 = angle_filter_state[rep_label]
+                if not np.isnan(primary_angle):
+                    if np.isnan(stf2['last']):
+                        stf2['last'] = primary_angle
+                        stf2['still'] = 0
+                    else:
+                        delta = abs(primary_angle - stf2['last'])
+                        if delta < args.angle_jitter_thresh:
+                            stf2['still'] += 1
+                            if stf2['still'] < args.min_still_frames:
+                                primary_angle = stf2['last']
+                            else:
+                                stf2['last'] = primary_angle
+                                stf2['still'] = 0
+                        else:
+                            stf2['last'] = primary_angle
+                            stf2['still'] = 0
+
                 if rep_label not in rep_counters:
                     if args.strict_reps or args.rep_mode == 'strict':
                         rep_counters[rep_label] = AdvancedRepCounter(down, up,
